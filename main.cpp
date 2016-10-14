@@ -21,6 +21,11 @@ bool imply(bool left, bool right) {
     return true;
 }
 
+//keeps track of blocks of elements that can be reduced
+struct Block {
+    unsigned start, end;
+};
+
 //given vector of n true-false elements in order
 //and vector of n-1 int as the order to execute the imply operation
 //return the resulting statement's value, true or false
@@ -37,44 +42,57 @@ bool applyLogic(std::vector<bool> values, std::vector<unsigned> order, bool verb
     static unsigned s = order.size();
     //this vector keeps track of which elements are "used" in an imply operation
     //TODO: actually this doesn't work. oops.
-    std::vector<bool> positionDone(s+1, false);
+    std::vector<Block> positionDone;
     //iterate through the list of orders
     for (unsigned i = 0; i < s; i++) {
         //cache the element in order
-        const int pos = order[i];
+        const unsigned pos = order[i];
         //execute the imply operator, and cache the result
         bool implyValue = imply(values[pos], values[pos + 1]);
         //debug option
         if (verbose)
             std::cout << pos << ' ' << values[pos] << "->" << values[pos+1] << " = " << implyValue << std::endl;
-        //remember that these elements are involved in an imply operation, and can be reduced
-        positionDone[pos] = true;
-        positionDone[pos+1] = true;
-        //go through the continuouse sections of elements that can be reduced
-        //and make their value the same
-        //TODO: this is the part that oesn't work
-        unsigned iteratePos = pos;
-        bool shouldBreak = false;
-        while (!shouldBreak) {
-            if (positionDone[iteratePos]) {
-                values[iteratePos] = implyValue;
-                if (iteratePos == 0)
-                    shouldBreak = true;
-                iteratePos--;
-            } else {
-                shouldBreak = true;
+        //these remember that these elements are involved in an imply operation, and can be reduced
+        bool foundFirst = false, foundSecond = false;
+        //these remember the position of the blocks found
+        int firstBlock, secondBlock;
+        for (unsigned b = 0; b < positionDone.size(); b++) {
+            //test if the block's start is our end
+            if (positionDone[b].start == pos + 1) {
+                foundSecond = true;
+                secondBlock = b;
+            }
+            //test if the block's end is our start
+            if (positionDone[b].end == pos) {
+                foundFirst = true;
+                firstBlock = b;
             }
         }
-        shouldBreak = false;
-        iteratePos = pos + 1;
-        while (!shouldBreak) {
-            if (positionDone[iteratePos]) {
-                values[iteratePos] = implyValue;
-                if (iteratePos >= s)
-                    shouldBreak = true;
-                iteratePos++;
-            } else {
-                shouldBreak = true;
+        if (foundFirst && foundSecond) {
+            //if both blocks exist, join them
+            positionDone[firstBlock].end = positionDone[secondBlock].end;
+            positionDone.erase(positionDone.begin()+secondBlock);
+        } else if (foundSecond) {
+            //if only second block exists, extend its start
+            positionDone[secondBlock].start--;
+        } else if (foundFirst) {
+            //if only first block exists, extend its end
+            positionDone[firstBlock].end++;
+        } else {
+            //otherwise no valid block exists, create a new one
+            Block newBlock;
+            newBlock.start = pos;
+            newBlock.end = pos+1;
+            positionDone.push_back(newBlock);
+        }
+        //go through the continuous sections of elements that can be reduced
+        for (Block b : positionDone) {
+            //find the block that we belnogs to
+            if (pos >= b.start || pos+1 <= b.end) {
+                //and make the values and all elements in this block the same
+                for (unsigned it = b.start; it <= b.end; it++) {
+                    values[it] = implyValue;
+                }
             }
         }
         //debug option
